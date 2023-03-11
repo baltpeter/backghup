@@ -12,6 +12,8 @@ Backghup is a command-line tool that lets you export and download all your data 
 * Milestones
 * Project and releases
 
+![Colorful illustration of a camera on a tripod pointing at a cloud in the sky](https://static.bn.al/img/backghup-hero.jpg)
+
 Backghup will download archives for your user account, as well as all organizations that you are an admin of (this is a limitation of the API). All repositories for the user or organization will be included in the archive.
 
 You can run backghup multiple times and it will detect existing migrations and archives less than an hour old (can be disabled, see below) and not request and/or download them again.
