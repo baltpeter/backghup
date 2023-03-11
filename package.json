@@ -1,6 +1,6 @@
 {
     "name": "backghup",
-    "version": "0.0.0",
+    "version": "1.0.0",
     "description": "Tool for backing up all your data on GitHub using the migration API.",
     "bugs": "https://github.com/baltpeter/backghup/issues",
     "repository": {
