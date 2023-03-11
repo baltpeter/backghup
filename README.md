@@ -10,7 +10,7 @@ Backghup is a command-line tool that lets you export and download all your data 
 * Commit comments
 * Attachments
 * Milestones
-* Project and releases
+* Projects and releases
 
 ![Colorful illustration of a camera on a tripod pointing at a cloud in the sky](https://static.bn.al/img/backghup-hero.jpg)
 
