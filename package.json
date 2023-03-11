@@ -2,6 +2,13 @@
     "name": "backghup",
     "version": "1.0.1",
     "description": "Tool for backing up all your data on GitHub using the migration API.",
+    "keywords": [
+        "github",
+        "backup",
+        "migration",
+        "cli",
+        "command-line-tool"
+    ],
     "bugs": "https://github.com/baltpeter/backghup/issues",
     "repository": {
         "type": "git",
