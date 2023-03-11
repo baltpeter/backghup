@@ -1,4 +1,4 @@
-# backghup – Backup GitHub data using migrations
+# backghup – Back up GitHub data using migrations
 
 > Tool for backing up all your data on GitHub using the migration API.
 
