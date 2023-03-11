@@ -19,7 +19,32 @@ const argv = yargs(hideBin(process.argv))
             describe: 'Directory to store the archives in.',
             default: 'archives',
         },
+        exclude: {
+            type: 'string',
+            array: true,
+            describe:
+                'A regex to filter out the user and/or specific organizations (can be specified multiple times). The regex has to match the full name of the user or organization, from start to end, to exclude it (it will be automatically enclosed in the ^ and $ anchors). It is case-insensitive.',
+            default: [],
+        },
+        'exclude-repo': {
+            type: 'string',
+            array: true,
+            describe:
+                'A regex to filter out specific repositories (can be specified multiple times). This is run against the full repository name (e.g. `baltpeter/backghup`). The regex has to match the full name of the repository, from start to end, to exclude it (it will be automatically enclosed in the ^ and $ anchors). It is case-insensitive.',
+            default: [],
+        },
     })
+    .example('$0', 'Back up all your repositories, including the ones in organizations you are an admin of.')
+    .example('$0 --out-dir ~/backups', 'Back up all your repositories, and store the archives in `~/backups`.')
+    .example(
+        '$0 --exclude baltpeter --exclude tweaselORG',
+        'Back up everything, but exclude the `baltpeter` user and the `tweaselORG` organization.'
+    )
+    .example('$0 --exclude-repo baltpeter/backghup', 'Back up everything, except the `baltpeter/backghup` repository.')
+    .example(
+        '$0 --exclude "b.*" --exclude-repo "baltpeter/.*-config"',
+        'Back up everything, except repositories from users/organzations starting with a `b`, and repositories from the `baltpeter` user that end with `-config`.'
+    )
     .parseSync();
 
 const token = process.env['GITHUB_TOKEN'];
@@ -51,15 +76,19 @@ const ora = (options: Parameters<typeof _ora>[0]) =>
     const username = (await octokit.rest.users.getAuthenticated()).data.login;
 
     const subjectToString = (s: Subject) => `${s.type} "${s.type === 'org' ? s.org : username}"`;
+    const matchAgainstArgvRegex = (regex: 'exclude' | 'exclude-repo', value: string) =>
+        argv[regex].some((r) => new RegExp(`^${r}$`, 'i').test(value));
 
     const getExistingMigrationOrCreateNew = async (subject: Subject): Promise<UserOrOrgState | undefined> => {
         const spinner = ora(`Starting migration for ${subjectToString(subject)}...`).start();
 
         try {
-            const repos =
+            const allRepos = (
                 subject.type === 'user'
                     ? await octokit.rest.repos.listForAuthenticatedUser({ affiliation: 'owner' })
-                    : await octokit.rest.repos.listForOrg({ org: subject.org });
+                    : await octokit.rest.repos.listForOrg({ org: subject.org })
+            ).data as { id: number; full_name: string }[];
+            const repos = allRepos.filter((repo) => !matchAgainstArgvRegex('exclude-repo', repo.full_name));
 
             if (!argv.forceNewMigration) {
                 const migrations =
@@ -72,7 +101,7 @@ const ora = (options: Parameters<typeof _ora>[0]) =>
                 const existingMigration = migrations.data.find(
                     (migration) =>
                         new Date(migration.created_at) > oneHourAgo &&
-                        (repos.data as { id: number }[]).every((repo) =>
+                        repos.every((repo) =>
                             migration.repositories.some((migrationRepo) => migrationRepo.id === repo.id)
                         )
                 );
@@ -90,11 +119,11 @@ const ora = (options: Parameters<typeof _ora>[0]) =>
             const migration =
                 subject.type === 'user'
                     ? await octokit.rest.migrations.startForAuthenticatedUser({
-                          repositories: repos.data.map((repo) => repo.full_name),
+                          repositories: repos.map((repo) => repo.full_name),
                       })
                     : await octokit.rest.migrations.startForOrg({
                           org: subject.org,
-                          repositories: repos.data.map((repo) => repo.full_name),
+                          repositories: repos.map((repo) => repo.full_name),
                       });
             spinner.succeed(`Started migration for ${subjectToString(subject)} [#${migration.data.id}].`);
             return { id: migration.data.id, downloaded: false, failed: false };
@@ -105,11 +134,13 @@ const ora = (options: Parameters<typeof _ora>[0]) =>
         }
     };
 
-    const adminOrgs = (await octokit.rest.orgs.listMembershipsForAuthenticatedUser()).data.filter(
-        (org) => org.role === 'admin'
-    );
+    const adminOrgs = (await octokit.rest.orgs.listMembershipsForAuthenticatedUser()).data
+        .filter((org) => org.role === 'admin')
+        .filter((org) => !matchAgainstArgvRegex('exclude', org.organization.login));
     const state = {
-        user: await getExistingMigrationOrCreateNew({ type: 'user' }),
+        user: matchAgainstArgvRegex('exclude', username)
+            ? undefined
+            : await getExistingMigrationOrCreateNew({ type: 'user' }),
         orgs: await adminOrgs.reduce<Promise<Record<string, UserOrOrgState>>>(async (_acc, orgData) => {
             const acc = await _acc;
             const org = orgData.organization.login;
