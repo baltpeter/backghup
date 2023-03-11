@@ -2,18 +2,30 @@ import fs from 'fs-extra';
 import { Octokit } from 'octokit';
 import _ora, { oraPromise } from 'ora';
 import { join } from 'path';
+import yargs from 'yargs';
+import { hideBin } from 'yargs/helpers';
+
+const argv = yargs(hideBin(process.argv))
+    .options({
+        'force-new-migration': {
+            type: 'boolean',
+            describe:
+                'By default, if there is an existing migration created in the last hour, we’ll use that one instead of creating a new one. With this flag, you can force a new migration to always be created.',
+            default: false,
+        },
+        'out-dir': {
+            type: 'string',
+            describe: 'Directory to store the archives in.',
+            default: 'archives',
+        },
+    })
+    .parseSync();
 
 const token = process.env['GITHUB_TOKEN'];
 if (!token)
     throw new Error(
         'You need to provide a personal access token for your GitHub account in the GITHUB_TOKEN environment variable. The token needs to have the `repo` and `read:org` scopes.'
     );
-
-// By default, if there is an existing migration created in the last hour, we'll use that one instead of creating a new
-// one.
-const forceNewMigration = process.argv.includes('--force-new-migration');
-const outDir =
-    (process.argv.includes('--out-dir') && process.argv[process.argv.indexOf('--out-dir') + 1]) || 'archives';
 
 const octokit = new Octokit({ auth: token, userAgent: 'baltpeter/backghup' });
 
@@ -62,7 +74,7 @@ const ora = (options: Parameters<typeof _ora>[0]) =>
                     )
             );
 
-            if (!forceNewMigration && existingMigration) {
+            if (!argv.forceNewMigration && existingMigration) {
                 spinner.succeed(
                     `Found existing migration for ${subjectToString(subject)} [#${existingMigration.id}, from: ${
                         existingMigration.created_at
@@ -104,7 +116,7 @@ const ora = (options: Parameters<typeof _ora>[0]) =>
     } as const;
 
     console.log();
-    await fs.ensureDir(outDir);
+    await fs.ensureDir(argv.outDir);
 
     // eslint-disable-next-line no-constant-condition
     while (true) {
@@ -130,7 +142,7 @@ const ora = (options: Parameters<typeof _ora>[0]) =>
                     subject.type === 'user' ? username : subject.org
                 }_${migrationStatus.data.id}.tar.gz`;
 
-                if (await fs.pathExists(join(outDir, filename))) {
+                if (await fs.pathExists(join(argv.outDir, filename))) {
                     spinner.succeed(
                         `Archive already downloaded for ${subjectToString(subject)} [#${migrationStatus.data.id}].`
                     );
@@ -173,7 +185,7 @@ const ora = (options: Parameters<typeof _ora>[0]) =>
                             }
                         )
                     ).data as ArrayBuffer;
-                    await fs.writeFile(join(outDir, filename), Buffer.from(archive));
+                    await fs.writeFile(join(argv.outDir, filename), Buffer.from(archive));
 
                     if (subject.type === 'user') state.user!.downloaded = true;
                     else state.orgs[subject.org]!.downloaded = true;
