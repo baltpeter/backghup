@@ -1,27 +1,68 @@
-# backghup
+# backghup – Backup GitHub data using migrations
 
 > Tool for backing up all your data on GitHub using the migration API.
 
-<!-- TODO: A longer introduction to the module. -->
+Backghup is a command-line tool that lets you export and download all your data stored on GitHub. It uses the [migration API](https://docs.github.com/en/rest/migrations) to create and retrieve migration archives that can contain the following data (see the [API documentation for a full list](https://docs.github.com/en/rest/migrations/users?apiVersion=2022-11-28#download-a-user-migration-archive)):
 
-## Installation
+* Repositories
+* Issues, including comments
+* Pull requests, including comments
+* Commit comments
+* Attachments
+* Milestones
+* Project and releases
 
-You can install backghup using yarn or npm:
+Backghup will download archives for your user account, as well as all organizations that you are an admin of (this is a limitation of the API). All repositories for the user or organization will be included in the archive.
+
+You can run backghup multiple times and it will detect existing migrations and archives less than an hour old (can be disabled, see below) and not request and/or download them again.
+
+## Installation and usage
+
+You can install backghup globally using yarn or npm:
 
 ```sh
-yarn add backghup
-# or `npm i backghup`
+yarn global add backghup
+# or `npm install -g backghup`
 ```
 
-<!--
-## Example usage
+Alternatively, you can run it directly with npx:
 
-TODO: Describe the usage example(s).
-
-```ts
-// TODO: Example code.
+```sh
+npx backghup [options]
 ```
--->
+
+To use backghup, you need to [create an access token](https://github.com/settings/tokens) with the `repo` and `read:org` scopes.
+
+Then, set the `GITHUB_TOKEN` environment variable to this access token:
+
+```sh
+export GITHUB_TOKEN=your-token-here
+```
+
+Finally, run backghup to create a new migration and download the archives:
+
+```sh
+backghup
+```
+
+This will download the archives for your user and organizations as `.tar.gz` files to the `archives` folder. You can change the output folder with the `--out-dir` option.
+
+By default, backghup will check if there is an existing migration less than an hour old and if so, use that instead of creating a new one. You can force backghup to always create new migrations with the `--force-new-migration` flag. 
+
+Use `backghup --help` to show the help:
+
+```
+Options:
+  --help                 Show help                                     [boolean]
+  --version              Show version number                           [boolean]
+  --force-new-migration  By default, if there is an existing migration created
+                         in the last hour, we’ll use that one instead of
+                         creating a new one. With this flag, you can force a new
+                         migration to always be created.
+                                                      [boolean] [default: false]
+  --out-dir              Directory to store the archives in.
+                                                  [string] [default: "archives"]
+```
 
 ## License
 
