@@ -59,28 +59,31 @@ const ora = (options: Parameters<typeof _ora>[0]) =>
                 subject.type === 'user'
                     ? await octokit.rest.repos.listForAuthenticatedUser({ affiliation: 'owner' })
                     : await octokit.rest.repos.listForOrg({ org: subject.org });
-            const migrations =
-                subject.type === 'user'
-                    ? await octokit.rest.migrations.listForAuthenticatedUser()
-                    : await octokit.rest.migrations.listForOrg({ org: subject.org });
 
-            // Check if there is an existing migration from the last hour that contains all repos.
-            const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-            const existingMigration = migrations.data.find(
-                (migration) =>
-                    new Date(migration.created_at) > oneHourAgo &&
-                    (repos.data as { id: number }[]).every((repo) =>
-                        migration.repositories.some((migrationRepo) => migrationRepo.id === repo.id)
-                    )
-            );
+            if (!argv.forceNewMigration) {
+                const migrations =
+                    subject.type === 'user'
+                        ? await octokit.rest.migrations.listForAuthenticatedUser()
+                        : await octokit.rest.migrations.listForOrg({ org: subject.org });
 
-            if (!argv.forceNewMigration && existingMigration) {
-                spinner.succeed(
-                    `Found existing migration for ${subjectToString(subject)} [#${existingMigration.id}, from: ${
-                        existingMigration.created_at
-                    }].`
+                // Check if there is an existing migration from the last hour that contains all repos.
+                const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+                const existingMigration = migrations.data.find(
+                    (migration) =>
+                        new Date(migration.created_at) > oneHourAgo &&
+                        (repos.data as { id: number }[]).every((repo) =>
+                            migration.repositories.some((migrationRepo) => migrationRepo.id === repo.id)
+                        )
                 );
-                return { id: existingMigration.id, downloaded: false, failed: false };
+
+                if (existingMigration) {
+                    spinner.succeed(
+                        `Found existing migration for ${subjectToString(subject)} [#${existingMigration.id}, from: ${
+                            existingMigration.created_at
+                        }].`
+                    );
+                    return { id: existingMigration.id, downloaded: false, failed: false };
+                }
             }
 
             const migration =
