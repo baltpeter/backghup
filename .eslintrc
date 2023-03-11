@@ -2,6 +2,8 @@
     "root": true,
     "extends": ["@baltpeter/eslint-config"],
     "rules": {
-        "no-console": "error"
+        "require-atomic-updates": "off",
+        "camelcase": ["error", { "properties": "never" }], // :(
+        "@typescript-eslint/no-non-null-assertion": "off"
     }
 }
