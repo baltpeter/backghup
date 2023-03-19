@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import decompress from 'decompress';
 import fs from 'fs-extra';
 import { Octokit } from 'octokit';
 import _ora, { oraPromise } from 'ora';
@@ -19,6 +20,18 @@ const argv = yargs(hideBin(process.argv))
             describe: 'Directory to store the archives in.',
             default: 'archives',
         },
+        extract: {
+            type: 'boolean',
+            describe:
+                'Extract the archives into a folder named after the user/organization after downloading them. This will overwrite/delete existing files from a previous run (it is mostly meant to be used in conjunction with an incremental backup software).\nBy default, the archives are deleted after extraction. You can disable that behaviour with the `--keep-archives` flag.',
+            default: false,
+        },
+        'keep-archives': {
+            type: 'boolean',
+            describe:
+                'If you use the `--extract` flag, the archive files are deleted by default after extraction. With this flag, you can disable that behaviour to keep the archives after extracting them.',
+            default: false,
+        },
         exclude: {
             type: 'string',
             array: true,
@@ -35,7 +48,15 @@ const argv = yargs(hideBin(process.argv))
         },
     })
     .example('$0', 'Back up all your repositories, including the ones in organizations you are an admin of.')
-    .example('$0 --out-dir ~/backups', 'Back up all your repositories, and store the archives in `~/backups`.')
+    .example('$0 --out-dir ~/gh-backups', 'Back up everything, and store the archives in `~/gh-backups`.')
+    .example(
+        '$0 --out-dir ~/gh-backups --extract',
+        'Back up everything, and extract the downloaded archives into a subdirectory named after the user/organization in `~/gh-backups`. Afterwards, delete the archive files.'
+    )
+    .example(
+        '$0 --extract --keep-archives',
+        "Back up everything and extract the archives, but don't delete the archive files after extraction."
+    )
     .example(
         '$0 --exclude baltpeter --exclude tweaselORG',
         'Back up everything, but exclude the `baltpeter` user and the `tweaselORG` organization.'
@@ -159,6 +180,31 @@ const ora = (options: Parameters<typeof _ora>[0]) =>
             Object.values([state.user, ...Object.values(state.orgs)]).every((s) => !s || s.downloaded || s.failed);
         if (done()) break;
 
+        const extractArchive = async (archivePath: string, subject: Subject) => {
+            const spinner = ora(`Extracting archive for ${subjectToString(subject)}...`).start();
+
+            try {
+                const extractDir = join(argv.outDir, subject.type === 'user' ? username : subject.org);
+
+                // Delete a potential previous extraction. We don't want files that are no longer in the migration to
+                // stay around.
+                await fs.remove(extractDir);
+
+                await decompress(archivePath, extractDir);
+                spinner.succeed(`Extracted archive for ${subjectToString(subject)}.`);
+
+                if (!argv.keepArchives)
+                    await fs
+                        .remove(archivePath)
+                        .catch((err) => console.error('Failed to delete archive after extraction: ', err));
+            } catch (err) {
+                spinner.fail(`Failed to extract archive for ${subjectToString(subject)}.`);
+                console.error(err);
+                if (subject.type === 'user') state.user!.failed = true;
+                else state.orgs[subject.org]!.failed = true;
+            }
+        };
+
         const tryToDownloadArchive = async (subject: Subject) => {
             const spinner = ora(`Checking migration status for ${subjectToString(subject)}...`).start();
 
@@ -184,6 +230,9 @@ const ora = (options: Parameters<typeof _ora>[0]) =>
 
                     if (subject.type === 'user') state.user!.downloaded = true;
                     else state.orgs[subject.org]!.downloaded = true;
+
+                    if (argv.extract) await extractArchive(join(argv.outDir, filename), subject);
+
                     return;
                 }
 
@@ -221,6 +270,8 @@ const ora = (options: Parameters<typeof _ora>[0]) =>
                         )
                     ).data as ArrayBuffer;
                     await fs.writeFile(join(argv.outDir, filename), Buffer.from(archive));
+
+                    if (argv.extract) await extractArchive(join(argv.outDir, filename), subject);
 
                     if (subject.type === 'user') state.user!.downloaded = true;
                     else state.orgs[subject.org]!.downloaded = true;

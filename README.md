@@ -64,6 +64,8 @@ You can also use the `--exclude` option to filter out specific users and organiz
   backghup --exclude-repo "<your username>/js-.+" --exclude-repo baltpeter/backghup
   ```
 
+Finally, you can use the `--extract` flag to extract the archives after downloading them. Note that this will overwrite/delete existing files from a previous run (it is mostly meant to be used in conjunction with an incremental backup software). Also, by default, the archives are deleted after extraction. You can disable that behaviour with the `--keep-archives` flag.
+
 Use `backghup --help` to show the help:
 
 ```
@@ -95,8 +97,17 @@ Examples:
   backghup                                  Back up all your repositories,
                                             including the ones in organizations
                                             you are an admin of.
-  backghup --out-dir ~/backups              Back up all your repositories, and
-                                            store the archives in `~/backups`.
+  backghup --out-dir ~/gh-backups           Back up everything, and store the
+                                            archives in `~/gh-backups`.
+  backghup --out-dir ~/gh-backups           Back up everything, and extract the
+  --extract                                 downloaded archives into a
+                                            subdirectory named after the user/
+                                            organization in `~/gh-backups`.
+                                            Afterwards, delete the archive
+                                            files.
+  backghup --extract --keep-archives        Back up everything and extract the
+                                            archives, but don't delete the
+                                            archive files after extraction.
   backghup --exclude baltpeter --exclude    Back up everything, but exclude the
   tweaselORG                                `baltpeter` user and the
                                             `tweaselORG` organization.
