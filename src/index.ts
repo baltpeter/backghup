@@ -115,20 +115,20 @@ const ora = (options: Parameters<typeof _ora>[0]) =>
         try {
             const allRepos = (
                 subject.type === 'user'
-                    ? await octokit.rest.repos.listForAuthenticatedUser({ affiliation: 'owner' })
-                    : await octokit.rest.repos.listForOrg({ org: subject.org })
-            ).data as { id: number; full_name: string }[];
+                    ? await octokit.paginate(octokit.rest.repos.listForAuthenticatedUser, { affiliation: 'owner' })
+                    : await octokit.paginate(octokit.rest.repos.listForOrg, { org: subject.org })
+            ) as { id: number; full_name: string }[];
             const repos = allRepos.filter((repo) => !matchAgainstArgvRegex('exclude-repo', repo.full_name));
 
             if (!argv.forceNewMigration) {
                 const migrations =
                     subject.type === 'user'
-                        ? await octokit.rest.migrations.listForAuthenticatedUser()
-                        : await octokit.rest.migrations.listForOrg({ org: subject.org });
+                        ? await octokit.paginate(octokit.rest.migrations.listForAuthenticatedUser)
+                        : await octokit.paginate(octokit.rest.migrations.listForOrg, { org: subject.org });
 
                 // Check if there is an existing migration from the last hour that contains all repos.
                 const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-                const existingMigration = migrations.data.find(
+                const existingMigration = migrations.find(
                     (migration) =>
                         new Date(migration.created_at) > oneHourAgo &&
                         repos.every((repo) =>
@@ -164,7 +164,7 @@ const ora = (options: Parameters<typeof _ora>[0]) =>
         }
     };
 
-    const adminOrgs = (await octokit.rest.orgs.listMembershipsForAuthenticatedUser()).data
+    const adminOrgs = (await octokit.paginate(octokit.rest.orgs.listMembershipsForAuthenticatedUser))
         .filter((org) => org.role === 'admin')
         .filter((org) => !matchAgainstArgvRegex('exclude', org.organization.login));
     const state = {
