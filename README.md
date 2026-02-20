@@ -33,7 +33,7 @@ Alternatively, you can run it directly with npx:
 npx backghup [options]
 ```
 
-To use backghup, you need to [create an access token](https://github.com/settings/tokens) with the `repo` and `read:org` scopes.
+To use backghup, you need to [create an access token](https://github.com/settings/tokens) with the `repo` and `admin:org` scopes.
 
 Then, set the `GITHUB_TOKEN` environment variable to this access token:
 

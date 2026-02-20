@@ -71,7 +71,7 @@ const argv = yargs(hideBin(process.argv))
 const token = process.env['GITHUB_TOKEN'];
 if (!token)
     throw new Error(
-        'You need to provide a personal access token for your GitHub account in the GITHUB_TOKEN environment variable. The token needs to have the `repo` and `read:org` scopes.'
+        'You need to provide a personal access token for your GitHub account in the GITHUB_TOKEN environment variable. The token needs to have the `repo` and `admin:org` scopes.'
     );
 
 const octokit = new Octokit({ auth: token, userAgent: 'baltpeter/backghup' });
