@@ -78,7 +78,7 @@ const octokit = new Octokit({ auth: token, userAgent: 'baltpeter/backghup' });
 
 type Subject = { type: 'user' } | { type: 'org'; org: string };
 
-type UserOrOrgState = { id: number; downloaded: boolean; failed: boolean };
+type UserOrOrgState = { id?: number; downloaded: boolean; failed: boolean };
 
 const pause = (ms: number) =>
     new Promise((res) => {
@@ -100,7 +100,16 @@ const ora = (options: Parameters<typeof _ora>[0]) =>
     const matchAgainstArgvRegex = (regex: 'exclude' | 'exclude-repo', value: string) =>
         argv[regex].some((r) => new RegExp(`^${r}$`, 'i').test(value));
 
-    const getExistingMigrationOrCreateNew = async (subject: Subject): Promise<UserOrOrgState | undefined> => {
+    const markFailed = (subject: Subject) => {
+        if (subject.type === 'user') {
+            if (state.user) state.user.failed = true;
+        } else {
+            const orgState = state.orgs[subject.org];
+            if (orgState) orgState.failed = true;
+        }
+    };
+
+    const getExistingMigrationOrCreateNew = async (subject: Subject): Promise<UserOrOrgState> => {
         const spinner = ora(`Starting migration for ${subjectToString(subject)}...`).start();
 
         try {
@@ -151,7 +160,7 @@ const ora = (options: Parameters<typeof _ora>[0]) =>
         } catch (err) {
             spinner.fail(`Failed to start migration for ${subjectToString(subject)}.`);
             console.error(err);
-            return undefined;
+            return { downloaded: false, failed: true };
         }
     };
 
@@ -165,8 +174,7 @@ const ora = (options: Parameters<typeof _ora>[0]) =>
         orgs: await adminOrgs.reduce<Promise<Record<string, UserOrOrgState>>>(async (_acc, orgData) => {
             const acc = await _acc;
             const org = orgData.organization.login;
-            const res = await getExistingMigrationOrCreateNew({ type: 'org', org });
-            if (res) acc[org] = res;
+            acc[org] = await getExistingMigrationOrCreateNew({ type: 'org', org });
             return acc;
         }, Promise.resolve({})),
     } as const;
@@ -194,28 +202,34 @@ const ora = (options: Parameters<typeof _ora>[0]) =>
                 spinner.succeed(`Extracted archive for ${subjectToString(subject)}.`);
 
                 if (!argv.keepArchives)
-                    await fs
-                        .remove(archivePath)
-                        .catch((err) => console.error('Failed to delete archive after extraction: ', err));
+                    await fs.remove(archivePath).catch((err) => {
+                        markFailed(subject);
+                        console.error('Failed to delete archive after extraction: ', err);
+                    });
             } catch (err) {
                 spinner.fail(`Failed to extract archive for ${subjectToString(subject)}.`);
                 console.error(err);
-                if (subject.type === 'user') state.user!.failed = true;
-                else state.orgs[subject.org]!.failed = true;
+                markFailed(subject);
             }
         };
 
         const tryToDownloadArchive = async (subject: Subject) => {
             const spinner = ora(`Checking migration status for ${subjectToString(subject)}...`).start();
+            const migrationId = subject.type === 'user' ? state.user!.id : state.orgs[subject.org]!.id;
+            if (!migrationId) {
+                spinner.fail(`Missing migration ID for ${subjectToString(subject)}.`);
+                markFailed(subject);
+                return;
+            }
 
             try {
                 const migrationStatus =
                     subject.type === 'user'
                         ? await octokit.rest.migrations.getStatusForAuthenticatedUser({
-                              migration_id: state.user!.id,
+                              migration_id: migrationId,
                           })
                         : await octokit.rest.migrations.getStatusForOrg({
-                              migration_id: state.orgs[subject.org]!.id,
+                              migration_id: migrationId,
                               org: subject.org,
                           });
 
@@ -239,8 +253,7 @@ const ora = (options: Parameters<typeof _ora>[0]) =>
                 if (migrationStatus.data.state === 'failed') {
                     spinner.fail(`Migration for ${subjectToString(subject)} [#${migrationStatus.data.id}] failed.`);
 
-                    if (subject.type === 'user') state.user!.failed = true;
-                    else state.orgs[subject.org]!.failed = true;
+                    markFailed(subject);
                     return;
                 }
 
@@ -281,14 +294,14 @@ const ora = (options: Parameters<typeof _ora>[0]) =>
             } catch (err) {
                 spinner.fail(`Failed to check migration status or download archive for ${subjectToString(subject)}.`);
                 console.error(err);
-                if (subject.type === 'user') state.user!.failed = true;
-                else state.orgs[subject.org]!.failed = true;
+                markFailed(subject);
             }
         };
 
-        if (state.user && !state.user.downloaded) await tryToDownloadArchive({ type: 'user' });
+        if (state.user && !state.user.downloaded && !state.user.failed) await tryToDownloadArchive({ type: 'user' });
         for (const org of Object.keys(state.orgs)) {
-            if (state.orgs[org] && !state.orgs[org]!.downloaded) await tryToDownloadArchive({ type: 'org', org });
+            if (state.orgs[org] && !state.orgs[org]!.downloaded && !state.orgs[org]!.failed)
+                await tryToDownloadArchive({ type: 'org', org });
         }
 
         if (!done()) {
@@ -298,5 +311,5 @@ const ora = (options: Parameters<typeof _ora>[0]) =>
         }
     }
 
-    if (Object.values([state.user, ...Object.values(state.orgs)]).some((s) => s?.failed)) process.exit(1);
+    if (Object.values([state.user, ...Object.values(state.orgs)]).some((s) => s?.failed)) process.exitCode = 1;
 })();
